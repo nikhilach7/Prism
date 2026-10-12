@@ -7,3 +7,4 @@ output/*.log
 output/job_timings.csv
 __pycache__/
 .venv/
+.claude/
