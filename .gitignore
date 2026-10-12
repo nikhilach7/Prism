@@ -1,0 +1,9 @@
+data/raw/*.csv
+data/clean/
+data/hdfs_local/
+data/*.jsonl
+output/*.tsv
+output/*.log
+output/job_timings.csv
+__pycache__/
+.venv/

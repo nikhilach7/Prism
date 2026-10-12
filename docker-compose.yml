@@ -1,0 +1,73 @@
+# One command brings up: Kafka (KRaft, single broker) + Hadoop (HDFS + YARN, pseudo-distributed)
+#   docker compose build      # first time only (downloads Hadoop ~700 MB, be patient)
+#   docker compose up -d
+# Give Docker Desktop at least 6 GB RAM (Settings -> Resources).
+
+x-hadoop: &hadoop
+  build: ./hadoop
+  image: bda-hadoop:3.3.6
+  restart: unless-stopped
+
+services:
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: kafka
+    ports:
+      - "9092:9092"          # for producer/consumer scripts running on your laptop
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:19092,CONTROLLER://:9093,EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  namenode:
+    <<: *hadoop
+    container_name: namenode
+    hostname: namenode
+    command: ["namenode"]
+    ports:
+      - "9870:9870"          # HDFS web UI
+    volumes:
+      - nn-data:/hadoop/dfs/name
+
+  datanode:
+    <<: *hadoop
+    container_name: datanode
+    hostname: datanode
+    command: ["datanode"]
+    depends_on: [namenode]
+    volumes:
+      - dn-data:/hadoop/dfs/data
+
+  resourcemanager:
+    <<: *hadoop
+    container_name: resourcemanager
+    hostname: resourcemanager
+    command: ["resourcemanager"]
+    depends_on: [namenode]
+    ports:
+      - "8088:8088"          # YARN web UI
+    volumes:
+      - ./mapreduce:/opt/mapreduce:ro   # job scripts are visible to the hadoop client here
+
+  nodemanager:
+    <<: *hadoop
+    container_name: nodemanager
+    hostname: nodemanager
+    command: ["nodemanager"]
+    depends_on: [resourcemanager, datanode]
+
+volumes:
+  kafka-data:
+  nn-data:
+  dn-data:
