@@ -1,4 +1,7 @@
-# Product Return-Rate Pattern Analysis (BDA Lab Project #28)
+# PRISM
+
+### Streaming Return-Rate Analytics with Kafka, HDFS and MapReduce
+*(BDA Lab Project #28 — Product Return-Rate Pattern Analysis)*
 
 Stream e-commerce order/return events through **Kafka**, store them in **HDFS**, compute the weekly
 return rate per product category with **MapReduce** (Hadoop Streaming, Python), and flag any

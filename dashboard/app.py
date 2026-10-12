@@ -12,7 +12,7 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parent.parent
 REAL, SAMPLE = ROOT / "output", Path(__file__).resolve().parent / "sample_output"
 
-st.set_page_config(page_title="Return-Rate Monitor", layout="wide")
+st.set_page_config(page_title="PRISM - Return-Rate Monitor", layout="wide")
 src = REAL if (REAL / "week_category.tsv").exists() else SAMPLE
 if src is SAMPLE:
     st.warning("Showing SAMPLE data (pipeline output not found in ./output).")
@@ -28,8 +28,8 @@ def load(folder: Path):
 
 
 wc, cr = load(src)
-st.title("Product Return-Rate Pattern Analysis")
-st.caption("Weekly return rate per category - computed by MapReduce over events streamed via Kafka into HDFS")
+st.title("PRISM")
+st.caption("Streaming Return-Rate Analytics with Kafka, HDFS and MapReduce")
 
 with st.sidebar:
     threshold = st.slider("Alert threshold (%)", 1.0, 25.0, 10.0, 0.5)
