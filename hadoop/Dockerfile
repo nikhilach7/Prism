@@ -8,8 +8,14 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 ARG HADOOP_VERSION=3.3.6
-RUN curl -fsSL "https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
-    | tar -xz -C /opt \
+# dlcdn.apache.org is the CDN-backed current-release mirror (much faster than archive.apache.org,
+# which has no CDN and can take 20-40+ min for this ~700MB tarball). Falls back to the archive
+# if dlcdn no longer lists this version by the time you build. Downloaded to a file first (not
+# piped straight into tar) so a mid-transfer failure on the first URL can't corrupt the stream.
+RUN curl -fsSL -o /tmp/hadoop.tar.gz "https://dlcdn.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
+    || curl -fsSL -o /tmp/hadoop.tar.gz "https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
+ && tar -xzf /tmp/hadoop.tar.gz -C /opt \
+ && rm /tmp/hadoop.tar.gz \
  && ln -s /opt/hadoop-${HADOOP_VERSION} /opt/hadoop
 
 ENV HADOOP_HOME=/opt/hadoop \

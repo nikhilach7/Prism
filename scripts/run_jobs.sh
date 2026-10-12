@@ -3,6 +3,7 @@
 #   scripts/run_jobs.sh                 # normal run (with combiner)
 #   scripts/run_jobs.sh --no-combiner   # for the combiner-vs-no-combiner timing comparison
 set -euo pipefail
+export MSYS_NO_PATHCONV=1   # Windows Git Bash: stop MSYS rewriting /... args before they hit docker.exe
 
 THRESHOLD="${THRESHOLD:-10}"
 USE_COMBINER=1

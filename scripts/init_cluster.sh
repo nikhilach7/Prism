@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Run once after `docker compose up -d`: waits for HDFS, creates HDFS folders and the Kafka topic.
 set -euo pipefail
+# On Windows Git Bash, MSYS rewrites /data/... args into C:/... before they reach docker.exe,
+# breaking every `docker exec ... hdfs dfs ...` call below. No-op on Linux/Mac.
+export MSYS_NO_PATHCONV=1
 
 echo "[1/3] waiting for HDFS to leave safe mode..."
 for i in $(seq 1 30); do
