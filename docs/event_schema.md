@@ -17,5 +17,5 @@
 HDFS layout: `/data/ecom/raw/month=YYYY-MM/batch-<epoch_ms>-<n>.jsonl`
 Outputs: `/data/ecom/output/week_category/part-*`, `/data/ecom/output/category_region/part-*`
 
-Note for the report: the Kaggle file has one row per order with a return status, not a separate return-event
-log, so `return_request` events are *derived* from it (delay is simulated). Say this explicitly.
+Note: the Kaggle file has one row per order with a return status, not a separate return-event
+log, so `return_request` events are *derived* from it (the delay between order and return is simulated).

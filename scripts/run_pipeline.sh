@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end run (Day 2/3): stack up -> init -> stream into Kafka -> Kafka -> HDFS -> MapReduce -> export -> verify
+# End-to-end run: stack up -> init -> stream into Kafka -> Kafka -> HDFS -> MapReduce -> export -> verify
 set -euo pipefail
 export MSYS_NO_PATHCONV=1   # Windows Git Bash: stop MSYS rewriting /... args before they hit docker.exe
 cd "$(dirname "$0")/.."

@@ -48,7 +48,7 @@ def main():
             else:
                 raise ValueError("unknown event_type")
         except (ValueError, KeyError, TypeError):
-            # shows up under Job counters in the YARN UI -> good evidence for the report
+            # shows up under Job counters in the YARN UI for monitoring bad input records
             sys.stderr.write("reporter:counter:returns_job,bad_records,1\n")
             continue
         print(f"{key}\t{out}")

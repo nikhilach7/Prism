@@ -2,8 +2,8 @@
 
 **Source:** Kaggle — [E-commerce Sales Transactions Dataset](https://www.kaggle.com/datasets/miadul/e-commerce-sales-transactions-dataset) by Arif Miah
 (file: `ecommerce_sales_34500.csv`, 34,500 rows, 17 columns). The author labels it a synthetic dataset
-designed to simulate realistic online shopping data — note this in the report; it is still the real,
-unmodified Kaggle download (not a project-local fake), and `returned` is a genuine column, not derived.
+designed to simulate realistic online shopping data; it is nonetheless the real, unmodified Kaggle
+download (not a project-local fake), and `returned` is a genuine column, not derived.
 
 Loaded into `data/raw/ecommerce_sales_34500.csv` and cleaned with `ingestion/prep_data.py`
 (no `ALIASES` changes needed — column names matched automatically).

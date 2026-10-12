@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate a FAKE CSV shaped like the Kaggle e-commerce sales dataset.
 
-Purpose: let the whole team build/test the pipeline before (or if) the real Kaggle download is
-sorted out. Never present this as the real dataset in the report.
+Purpose: build/test the pipeline before (or if) the real Kaggle download is sorted out.
+Never present this as the real dataset.
 
     python scripts/make_synthetic.py --out data/raw/synthetic_ecommerce.csv
 """

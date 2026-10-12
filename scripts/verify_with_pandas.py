@@ -3,7 +3,7 @@
 
     python scripts/verify_with_pandas.py --clean data/clean/transactions_clean.csv \
                                          --mr output/week_category.tsv
-Exit code 0 = identical. Screenshot the PASS line for the report.
+Exit code 0 = identical.
 """
 import argparse
 import sys

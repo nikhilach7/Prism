@@ -1,17 +1,29 @@
 # PRISM
 
-### Streaming Return-Rate Analytics with Kafka, HDFS and MapReduce
-*(BDA Lab Project #28 — Product Return-Rate Pattern Analysis)*
+**Streaming Return-Rate Analytics with Kafka, HDFS and MapReduce**
 
-Stream e-commerce order/return events through **Kafka**, store them in **HDFS**, compute the weekly
-return rate per product category with **MapReduce** (Hadoop Streaming, Python), and flag any
-category above **10%** on a **Streamlit dashboard**.
+PRISM is a big-data pipeline that identifies which e-commerce product categories are driving return
+costs, computed weekly instead of in quarterly batch reviews. Order and return events are streamed
+through Kafka, landed on HDFS, aggregated with a Hadoop Streaming MapReduce job, and surfaced on a
+Streamlit dashboard that flags any category-week with a return rate above 10%.
 
-```
-CSV --> producer.py --> Kafka (ecom.transactions) --> consumer_to_hdfs.py --> HDFS /data/ecom/raw/month=YYYY-MM/
-                                                                                    |
-       dashboard (Streamlit) <-- output/*.tsv <-- HDFS /data/ecom/output <-- MapReduce jobs (YARN)
-```
+---
+
+## What's implemented
+
+| Area | Status | Details |
+|---|---|---|
+| Data cleaning | ✅ | `ingestion/prep_data.py` auto-detects source columns and normalizes them to a fixed schema |
+| Event streaming | ✅ | `ingestion/producer.py` replays the dataset into Kafka as `order` / `return_request` JSON events |
+| Kafka → HDFS sink | ✅ | `ingestion/consumer_to_hdfs.py` micro-batches events into `/data/ecom/raw/month=YYYY-MM/`, deduplicated |
+| MapReduce aggregation | ✅ | `mapreduce/rr_mapper.py` + `rr_reducer.py` (Hadoop Streaming, with combiner) — weekly rate per category, plus a category × region hotspot job |
+| 10% threshold flagging | ✅ | Reducer flags `HIGH` when rate > 10% and the cell has ≥ 10 orders (noise guard) |
+| Dashboard | ✅ | Streamlit + Plotly — KPI tiles, weekly trend chart, category/region heatmap, flagged-cells table |
+| Containerized cluster | ✅ | `docker-compose.yml` — single-broker Kafka (KRaft) + pseudo-distributed HDFS/YARN, one command to start |
+| Real dataset loaded & profiled | ✅ | See [`docs/dataset_profile.md`](docs/dataset_profile.md) |
+| Pandas cross-check | ✅ | `scripts/verify_with_pandas.py` independently recomputes every (week, category) rate and diffs it against the MapReduce output |
+
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -24,84 +36,162 @@ flowchart LR
     M1 --> O[(HDFS\n/data/ecom/output/)]
     M2 --> O
     O --> E[output/*.tsv]
-    E --> D[Streamlit dashboard\nPRISM]
+    E --> D[Streamlit dashboard]
 ```
 
-## Definitions (use these exact words in the report)
-- **Return rate (week, category)** = return requests / orders, for orders *placed* in that ISO week (cohort view, never above 100%).
-- **Flag** = `HIGH` when rate > 10% **and** the cell has at least 10 orders (noise guard).
-- **Returned value** = price x quantity of returned orders - the "return cost" finance cares about.
-- Job 1 `week_category`: weekly rate per category. Job 2 `category_region`: where returns concentrate.
+One beam of events goes in (Kafka), gets split and aggregated (MapReduce), and comes out the other
+side as category-wise return rates (the dashboard) — hence the name.
 
-## 0. Try the logic in 60 seconds (no Docker needed)
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Message streaming | Apache Kafka 3.7 (KRaft mode, no ZooKeeper) |
+| Distributed storage | Apache Hadoop HDFS 3.3.6 (pseudo-distributed) |
+| Batch compute | MapReduce via Hadoop Streaming (Python mapper/reducer + combiner) |
+| Orchestration | Docker Compose |
+| Ingestion / glue code | Python (`confluent-kafka`, `pandas`) |
+| Dashboard | Streamlit + Plotly |
+
+## Project structure
+
+```
+Prism/
+├── docker-compose.yml       # Kafka + HDFS + YARN, single command to stand up the cluster
+├── hadoop/                  # Custom Hadoop image (Ubuntu + JRE 11 + Python 3) and cluster config
+├── ingestion/
+│   ├── prep_data.py         # Cleans the raw Kaggle CSV into the pipeline's fixed schema
+│   ├── producer.py          # Replays cleaned rows into Kafka as order/return events
+│   ├── consumer_to_hdfs.py  # Kafka -> HDFS micro-batch writer
+│   └── config.py            # Shared settings (topic, bootstrap servers, batching)
+├── mapreduce/
+│   ├── rr_mapper.py         # Emits (week|category, orders/returns) and (category|region, ...)
+│   └── rr_reducer.py        # Aggregates, computes rate, applies the 10% HIGH flag
+├── dashboard/
+│   ├── app.py                # Streamlit app
+│   └── sample_output/        # Pre-computed sample output so the dashboard runs before the pipeline does
+├── scripts/
+│   ├── local_test.sh         # End-to-end logic test with no Docker (mapper|sort|reducer vs. pandas)
+│   ├── init_cluster.sh       # Creates HDFS dirs + Kafka topic after `docker compose up`
+│   ├── run_pipeline.sh       # Full run: cluster up -> stream -> MapReduce -> verify
+│   ├── run_jobs.sh           # Runs both MapReduce jobs, exports to output/*.tsv
+│   ├── verify_with_pandas.py # Independent pandas recomputation, diffed against MapReduce output
+│   └── make_synthetic.py     # Generates a fake stand-in dataset for testing only
+├── docs/
+│   ├── dataset_profile.md    # Dataset profile (source, columns, return-rate breakdown)
+│   └── event_schema.md       # Kafka event schema reference
+├── data/raw/                 # Drop the downloaded Kaggle CSV here (gitignored)
+└── output/                   # Pipeline output TSVs land here (gitignored)
+```
+
+## Getting started
+
+### 1. Try the logic — no Docker needed
+
+Runs the mapper/reducer logic locally against fake data and cross-checks every result against
+pandas. This is the fastest way to confirm your environment is set up correctly.
+
 ```bash
 pip install -r requirements.txt
-bash scripts/local_test.sh            # fake data -> events -> mapper|sort|reducer -> pandas cross-check
+bash scripts/local_test.sh
 ```
-Expect `PASS: all ... groups match between pandas and MapReduce`. Anyone on the team can run this.
 
-## 1. Real dataset
-**Done** — see [`docs/dataset_profile.md`](docs/dataset_profile.md). Source: Kaggle
-[**"E-commerce Sales Transactions Dataset"**](https://www.kaggle.com/datasets/miadul/e-commerce-sales-transactions-dataset)
-by Arif Miah (34,500 orders, 17 columns, genuine `returned` column — Kaggle requires sign-in to download,
-so grab it manually and drop it in `data/raw/`, it's gitignored). No category is above 10% overall, but
-**72 of 735 weekly category cells are flagged HIGH** — use the weekly view for the demo, not the overall table.
+Expect: `PASS: all ... groups match between pandas and MapReduce`.
+
+### 2. Get the real dataset
+
+Source: Kaggle [**E-commerce Sales Transactions Dataset**](https://www.kaggle.com/datasets/miadul/e-commerce-sales-transactions-dataset)
+(34,500 orders, 17 columns, genuine `returned` column). Kaggle requires sign-in to download — grab
+the CSV manually and place it in `data/raw/` (gitignored, so it won't be committed).
+
 ```bash
 python ingestion/prep_data.py --input data/raw/<file>.csv
 ```
-It auto-detects column names and prints a profile (rows, date range, return rate per category) for the report.
-If a column isn't found it tells you which one; add the header name to `ALIASES` in `prep_data.py`.
-`scripts/make_synthetic.py` makes a FAKE stand-in with the same shape - for testing only, never report it as real.
 
-## 2. Bring up the cluster
+This auto-detects column names, cleans the data into `data/clean/transactions_clean.csv`, and prints
+a profile (row counts, date range, return rate per category) — already captured for this dataset in
+[`docs/dataset_profile.md`](docs/dataset_profile.md). No category is above 10% in the *overall*
+aggregate, but **72 of 735 weekly category cells are** — use the weekly view, not the overall table,
+when demoing the flagging feature.
+
+> No real dataset handy yet? `python scripts/make_synthetic.py` generates a fake stand-in with the
+> same shape, for pipeline testing only — never present it as real data.
+
+### 3. Bring up the Kafka + Hadoop cluster
+
 ```bash
-docker compose build        # first time, ~10 min (downloads Hadoop)
+docker compose build        # first time only, downloads Hadoop (~700 MB)
 docker compose up -d
 bash scripts/init_cluster.sh
-docker exec nodemanager python3 --version      # MUST print a version (Streaming needs it)
+docker exec nodemanager python3 --version      # sanity check: must print a version
 ```
-UIs: HDFS http://localhost:9870 - YARN http://localhost:8088. Give Docker >= 6 GB RAM.
-No Docker? Use one Ubuntu VM with Kafka + Hadoop installed natively; the Python code is unchanged
-(set `KAFKA_BOOTSTRAP`, and change the `docker exec namenode ...` calls in `consumer_to_hdfs.py` / `run_jobs.sh` to local `hdfs` commands).
 
-## 3. Run the pipeline
+- HDFS UI: http://localhost:9870
+- YARN UI: http://localhost:8088
+- Give Docker at least 6 GB RAM.
+
+No Docker available? Run Kafka + Hadoop natively on a single Ubuntu VM instead — the Python code is
+unchanged; just set `KAFKA_BOOTSTRAP` and swap the `docker exec namenode ...` calls in
+`consumer_to_hdfs.py` / `run_jobs.sh` for local `hdfs` commands.
+
+### 4. Run the full pipeline
+
 ```bash
-pip install -r requirements.txt
-bash scripts/run_pipeline.sh          # or step by step:
+bash scripts/run_pipeline.sh
+```
+
+or step by step:
+
+```bash
 python ingestion/consumer_to_hdfs.py --sink hdfs --idle-exit 25 &
 python ingestion/producer.py --rate 1000
 bash scripts/run_jobs.sh              # writes output/week_category.tsv, output/category_region.tsv
 python scripts/verify_with_pandas.py
+```
+
+### 5. View the dashboard
+
+```bash
 streamlit run dashboard/app.py
 ```
 
-## Team roles
-| | Owner | Files |
-|---|---|---|
-| A | Infra | `docker-compose.yml`, `hadoop/`, `scripts/init_cluster.sh`, `run_pipeline.sh` |
-| B | Ingestion | `ingestion/*`, data cleaning, schema (`docs/event_schema.md`) |
-| C | MapReduce | `mapreduce/*`, `scripts/run_jobs.sh`, `verify_with_pandas.py` |
-| D | Dashboard + docs | `dashboard/app.py`, report, PPT, architecture diagram |
+Reads from `output/*.tsv` if present, otherwise falls back to `dashboard/sample_output/` so the UI
+can be reviewed before the pipeline has been run.
 
-## Day 1 checklist (done = ticked + pushed to Git)
-- [x] **All:** clone repo, `pip install -r requirements.txt`, `bash scripts/local_test.sh` passes
-- [x] **A:** `docker compose up -d` works; HDFS/YARN UIs open; `nodemanager python3 --version` OK; topic created; share any compose fixes via Git
-- [x] **B:** real Kaggle CSV downloaded; `prep_data.py` run; profile pasted into `docs/dataset_profile.md`; return column confirmed genuine (no `--synthesize-returns` needed)
-- [ ] **C:** read `rr_mapper.py` / `rr_reducer.py` line by line and explain them to the team; run them on the real cleaned data via `local_test.sh data/raw/<file>.csv` (logic already verified against real data, pandas cross-check PASSed — still read the code together)
-- [ ] **D:** run the dashboard on sample data; take the first screenshots; architecture diagram above is a draft - polish it; fill in [`docs/report_outline.md`](docs/report_outline.md)
+## Metric definitions
 
-## Known risks / things that may need a tweak on first run
-- `hadoop/Dockerfile` build verified working. It originally pulled from `archive.apache.org` (no CDN —
-  took 12+ minutes and counting before being swapped); it now tries `dlcdn.apache.org` first with the
-  archive as fallback. Build + `docker compose up -d` + `init_cluster.sh` all confirmed working end to end.
-- **Windows Git Bash only:** MSYS rewrites POSIX-looking args like `/data/ecom/raw` into Windows paths
-  (`C:/...`) before they reach `docker.exe`, breaking every `docker exec ... hdfs dfs ...` call with
-  `No FileSystem for scheme "C"`. Fixed by exporting `MSYS_NO_PATHCONV=1` in the affected scripts
-  (`init_cluster.sh`, `run_jobs.sh`, `run_pipeline.sh`). If you hit this error anywhere else, that's why.
-- Kafka listeners: scripts on your laptop use `localhost:9092`; anything inside Docker uses `kafka:19092`.
-- Small-files problem: raw data is partitioned by month on purpose, and the jobs use `CombineTextInputFormat`. Good viva answer.
-- Weekly flags depend on the data: check how many `HIGH` rows exist after `prep_data.py`. Zero flags = a boring demo, so look early. (Confirmed non-zero on the real dataset: 72/735 — see `docs/dataset_profile.md`.)
-- Docker Desktop on Windows has, at least once, silently dropped all running containers (not just
-  stopped them — `docker ps -a` showed nothing) during a long build. If `docker compose ps` comes up
-  empty after it was previously up, just `docker compose up -d` again; the built image is cached so
-  it's fast. Not yet root-caused — flag it if it recurs.
+| Term | Definition |
+|---|---|
+| Return rate (week, category) | `return requests / orders`, for orders *placed* in that ISO week (cohort view — never exceeds 100%) |
+| `HIGH` flag | Rate > 10% **and** the cell has at least 10 orders (noise guard against low-volume weeks) |
+| Returned value | `price × quantity` of returned orders — the return cost finance cares about |
+| Job 1 — `week_category` | Weekly return rate per category (the headline trend) |
+| Job 2 — `category_region` | Category × region, for finding where returns concentrate |
+
+## Results
+
+From the real Kaggle dataset (see [`docs/dataset_profile.md`](docs/dataset_profile.md) for the full
+breakdown):
+
+- 34,500 orders, 1,903 returns, 5.52% overall return rate
+- 735 (week, category) cells computed; **72 flagged `HIGH`**
+- Highest overall-return-rate categories: Fashion (8.28%), Electronics (7.30%)
+- Pandas cross-check: **PASS** — all 735 groups match between MapReduce and an independent pandas recomputation
+
+## Troubleshooting
+
+- **Hadoop image build speed**: `hadoop/Dockerfile` originally pulled the Hadoop tarball from
+  `archive.apache.org` (no CDN, 12+ minutes for ~700 MB). It now tries the CDN-backed
+  `dlcdn.apache.org` first, falling back to the archive if that mirror no longer has this version.
+- **Windows Git Bash**: MSYS rewrites POSIX-looking arguments like `/data/ecom/raw` into Windows
+  paths (`C:/...`) before they reach `docker.exe`, breaking every `docker exec ... hdfs dfs ...` call
+  with `No FileSystem for scheme "C"`. Fixed by exporting `MSYS_NO_PATHCONV=1` in
+  `init_cluster.sh`, `run_jobs.sh`, and `run_pipeline.sh`.
+- **Kafka listeners**: scripts run from your host use `localhost:9092`; anything running *inside*
+  Docker (e.g. the resourcemanager during a MapReduce job) uses `kafka:19092`.
+- **Small-files problem**: raw data is intentionally partitioned by month, and the MapReduce jobs use
+  `CombineTextInputFormat` to avoid excessive mapper overhead.
+- **Docker Desktop (Windows)** has, at least once, silently dropped all running containers (not just
+  stopped them) during a long build. If `docker compose ps` comes up empty after the stack was
+  previously up, just run `docker compose up -d` again — the built image is cached, so it's fast.
+

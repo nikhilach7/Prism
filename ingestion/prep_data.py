@@ -95,7 +95,7 @@ def main():
         rng = np.random.default_rng(a.seed)
         p = out["category"].map(DEFAULT_SYNTH_RATES).fillna(0.06)
         out["returned"] = (rng.random(len(out)) < p).astype(int)
-        print("WARNING: return flag was SYNTHESIZED. Say so in the report.")
+        print("WARNING: return flag was SYNTHESIZED, not sourced from real data.")
 
     before = len(out)
     out = out.dropna(subset=["order_date", "price", "category"])
@@ -109,7 +109,7 @@ def main():
     out.to_csv(a.output, index=False)
     out.head(a.sample_rows).to_csv(Path(a.output).with_name("sample.csv"), index=False)
 
-    # profile (paste this into the report's dataset section)
+    # dataset profile summary
     print(f"\nkept {len(out):,} of {before:,} rows -> {a.output}")
     print(f"date range : {out['order_date'].min()} -> {out['order_date'].max()}")
     print(f"categories : {out['category'].nunique()}  | overall return rate: {out['returned'].mean():.2%}")
