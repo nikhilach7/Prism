@@ -9,19 +9,6 @@ Streamlit dashboard that flags any category-week with a return rate above 10%.
 
 ---
 
-## What's implemented
-
-| Area | Status | Details |
-|---|---|---|
-| Data cleaning | ✅ | `ingestion/prep_data.py` auto-detects source columns and normalizes them to a fixed schema |
-| Event streaming | ✅ | `ingestion/producer.py` replays the dataset into Kafka as `order` / `return_request` JSON events |
-| Kafka → HDFS sink | ✅ | `ingestion/consumer_to_hdfs.py` micro-batches events into `/data/ecom/raw/month=YYYY-MM/`, deduplicated |
-| MapReduce aggregation | ✅ | `mapreduce/rr_mapper.py` + `rr_reducer.py` (Hadoop Streaming, with combiner) — weekly rate per category, plus a category × region hotspot job |
-| 10% threshold flagging | ✅ | Reducer flags `HIGH` when rate > 10% and the cell has ≥ 10 orders (noise guard) |
-| Dashboard | ✅ | Streamlit + Plotly — KPI tiles, weekly trend chart, category/region heatmap, flagged-cells table |
-| Containerized cluster | ✅ | `docker-compose.yml` — single-broker Kafka (KRaft) + pseudo-distributed HDFS/YARN, one command to start |
-| Real dataset loaded & profiled | ✅ | See [`docs/dataset_profile.md`](docs/dataset_profile.md) |
-| Pandas cross-check | ✅ | `scripts/verify_with_pandas.py` independently recomputes every (week, category) rate and diffs it against the MapReduce output |
 
 ## Architecture
 
