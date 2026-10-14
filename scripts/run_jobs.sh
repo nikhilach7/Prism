@@ -22,17 +22,30 @@ run_job () {   # $1=name  $2=group-mode  $3=header
 
   echo ">>> job: ${name}  (combiner=${USE_COMBINER})"
   local t0=$(date +%s)
+  if [[ $USE_COMBINER -eq 1 ]]; then
   docker exec resourcemanager hadoop jar "$JAR" \
     -D mapreduce.job.name="returns_${name}" \
     -D mapreduce.job.reduces=1 \
     -D mapreduce.input.fileinputformat.input.dir.recursive=true \
-    -inputformat org.apache.hadoop.mapred.lib.CombineTextInputFormat \
-    -files /opt/mapreduce/rr_mapper.py,/opt/mapreduce/rr_reducer.py \
+    -file /opt/mapreduce/rr_mapper.py \
+    -file /opt/mapreduce/rr_reducer.py \
     -input /data/ecom/raw \
     -output "$out" \
     -mapper "python3 rr_mapper.py --group ${mode}" \
-    "${combiner_args[@]}" \
+    -combiner "python3 rr_reducer.py --combine" \
     -reducer "python3 rr_reducer.py --threshold ${THRESHOLD}"
+  else
+  docker exec resourcemanager hadoop jar "$JAR" \
+    -D mapreduce.job.name="returns_${name}" \
+    -D mapreduce.job.reduces=1 \
+    -D mapreduce.input.fileinputformat.input.dir.recursive=true \
+    -file /opt/mapreduce/rr_mapper.py \
+    -file /opt/mapreduce/rr_reducer.py \
+    -input /data/ecom/raw \
+    -output "$out" \
+    -mapper "python3 rr_mapper.py --group ${mode}" \
+    -reducer "python3 rr_reducer.py --threshold ${THRESHOLD}"
+  fi
   local secs=$(( $(date +%s) - t0 ))
   echo "${name},combiner=${USE_COMBINER},${secs}s" >> output/job_timings.csv
 
